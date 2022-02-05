@@ -10,12 +10,19 @@ import UIKit
 class ViewController: UIViewController {
     @IBOutlet weak var tableView: UITableView!
     
-    var tasks: [Task] = []
+    var tasks: [Task] = [] {
+        //프로퍼티 옵저버
+        didSet{//tasks 배열에 할 일이 추가될 때마다 saveTasks가 호출되어 UserDefaults에 할 일이 저장된다.
+            self.saveTasks()
+        }
+    }
     
     override func viewDidLoad() {
         super.viewDidLoad()
         // Do any additional setup after loading the view.
         self.tableView.dataSource = self //UITableViewDataSource 프로토콜 채택하기
+        self.tableView.delegate = self //cell을 눌렀을 때 할 일을 완료했다는 체크마크가 뜨도록 만들기
+        self.loadTasks() //앱을 실행할 때마다 저장된 할 일들을 불러온다
     }
 
     @IBAction func tapEditButton(_ sender: UIBarButtonItem) {
@@ -64,6 +71,46 @@ class ViewController: UIViewController {
         self.present(alert, animated: true, completion: nil)
         
     }
+    
+    /*
+     UserDefaults
+     런타임 환경에서 동작하면서 앱이 실행되는 동안 기본 저장소에 접근해 데이터를 기록하고 가져오는 역할을 하는 인터페이스
+     Key-Value 쌍으로 저장되고 싱글턴 패턴으로 설계되어 앱 전체에 단 하나의 인스턴스만 존재하게 된다.
+     UserDefaults는 여러가지 타입을 저장할 수 있는데, 스위프트 안에 있는 Float, Int, Double, Bool, Url 등 기본적으로 제공하는 타입과 NSData, NSString, NSNumber 등 NS 관련 타입도 저장이 가능하다.
+     UserDefaults에 ‘할 일’을 저장하는 것을 구현해보자
+     */
+    //할 일이 추가될 때 마다 호출할 예정
+    func saveTasks() {
+        //배열에 있는 요소들을 딕셔너리 형태로 mapping(하나의 값을 다른 값으로 대응시키기)
+        let data = self.tasks.map{
+            [
+                "title": $0.title, //key:value
+                "done": $0.done  //key:value
+            ]
+        }
+        let userDefaults = UserDefaults.standard //유저 디펄슨에 접근할 수 있도록 만들기
+        //UserDefaults는 싱글턴이기 때문에 하나의 인스턴스만 존재한다.
+        userDefaults.setValue(data, forKey: "tasks") //유저 디펄스에 데이터 저장하기 키와 값이 쌍으로 저장된다.
+    }
+    
+    //앱을 재실행했을 때 저장된 할 일들을 load할 예정
+    //UserDefaults에 저장된 할 일들을 가져오기
+    func loadTasks() {
+        let userDefaults = UserDefaults.standard // UserDefaults에 접근하기
+        guard let data = userDefaults.object(forKey: "tasks") as? [[String: Any]] else {return}
+        //object(forKey:) 메서드는 Any 타입을 반환하는데, 데이터를 딕셔너리 배열 타입으로 저장했으므로 딕셔너리 배열 형태로 타입 캐스팅을 한다.
+        //타입 캐스팅에 실패하면 nil이 될 수도 있으므로 guard문 사용한다.
+        //저장된 데이터 키값을 이용해 불러오기
+        
+        self.tasks = data.compactMap{ //compactMap은 nil인 아닌 결과만을 모아 배열로 반환
+            guard let title = $0["title"] as? String else {return nil}
+            guard let done = $0["done"] as? Bool else {return nil}
+            return Task(title: title, done: done) ///Task타입이 되도록 인스턴스화한다.
+        }
+        //다시 tasks 배열에 저장하기 위해서 data를 tasks 타입의 배열이 되도록 mapping한다.
+        //$0 축약인자로 딕셔너리에 접근을 하고, title 키로 value 가져오기. 딕셔너리의 value가 Any 타입이므로 String으로 형변환. 타입 변환 실패시 nil 반환
+        //$0 축약인자로 딕셔너리에 접근을 하고, done 키로 value를 가져오기. 딕셔너리의 value가 Any 타입이므로 Bool로 형변환
+    }
 }
 
 //가독성을 위해 따로 UITableViewDataSource 프로토콜 채택
@@ -88,7 +135,26 @@ extension ViewController: UITableViewDataSource {
         let task = self.tasks[indexPath.row] //indexPath.row의 개수는 0~tasks.count까지
         cell.textLabel?.text = task.title
         
+        // done이 true이면 cell에 체크마트 그리기, 아니면 그리지 않기
+        if task.done {
+            cell.accessoryType = .checkmark
+        } else{
+            cell.accessoryType = .none
+        }
+        
         return cell
     }
 }
 
+//가독성을 위해 따로 UITableViewDelegate 프로토콜 채택
+extension ViewController: UITableViewDelegate {
+    //cell이 선택되었을 때 어떤 cell이 선택되었는지 알려주는 메서드
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        var task = self.tasks[indexPath.row]
+        task.done = !task.done //true라면 false가 되도록, false면 true가 되도록 한다.
+        self.tasks[indexPath.row] = task //재설정한 값을 원래 값 위에 덮는다.
+        self.tableView.reloadRows(at: [indexPath], with: .automatic) //선택된 cell만 reload하게 한다.
+        //인덱스패치 구조체의 배열을 넘겨주는데, 즉 단일 행 뿐만이 아니라 여러 개의 cell을 reload하게 만들 수 있다는 의미
+        //with 파라미터는 행이 업데이트 될 때 어느 애니메이션으로 작동할 지 지정하는 파라미터이다. 예 좌측 우측 으로 이동하며 사라지기
+    }
+}
