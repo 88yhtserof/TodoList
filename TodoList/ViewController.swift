@@ -9,6 +9,9 @@ import UIKit
 
 class ViewController: UIViewController {
     @IBOutlet weak var tableView: UITableView!
+    @IBOutlet var editButton: UIBarButtonItem!
+    //weak로 하게 되면 왼쪽 내비게이션 바 버튼이 Done이 되었을 때 이 Edit 버튼이 메모리에서 해제가 되어버려서 재사용할 수 없게 된다.따라서 strong 아울렛 변수가 되도록 설정해야한다.
+    var doneButton: UIBarButtonItem?
     
     var tasks: [Task] = [] {
         //프로퍼티 옵저버
@@ -19,13 +22,29 @@ class ViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Do any additional setup after loading the view.
+        
+        self.doneButton = UIBarButtonItem(barButtonSystemItem: .done, target: self, action: #selector(doneButtonTap)) //버튼 생성
+        //원래 셀렉터는 오브젝트-C에서 맥클래스? 메서드를 가리키는데 사용했던 참조타입이다. 동적 호출 등의 목적으로 사용되었다.
+        //이것이 스위프트로 넘어오면서 구조체 형식으로 정의가 되고 #selector()구문을 사용하여 해당타입의 값을 생성할 수 있게 되었다.
         self.tableView.dataSource = self //UITableViewDataSource 프로토콜 채택하기
         self.tableView.delegate = self //cell을 눌렀을 때 할 일을 완료했다는 체크마크가 뜨도록 만들기
         self.loadTasks() //앱을 실행할 때마다 저장된 할 일들을 불러온다
     }
 
+    //Done버튼이 선택되었을 때
+    //Selector타입으로 전달할 메서드를 작성할 때에는 @objc 버트리부트?를 필수로 작성해 주어야 한다.
+    //이는 오브젝트-C와의 호환성을 위한 것으로,  스위프트에서 정의한 메서드를 오브젝트-C에서도 인식할 수 있게 만들어준다.
+    //다시 Edit버튼이 되고 편집모드에서 빠져나오도록 구현
+    @objc func doneButtonTap(){
+        self.navigationItem.leftBarButtonItem = self.editButton //다시 EditButton이 되도록 한다
+        self.tableView.setEditing(false, animated: true) //tableView가 편집모드에서 빠져나오도록 한다.
+    }
+    
+    //edit버튼 클릭시 tableView가 편집모드로 전환될 수 있도록 구현
     @IBAction func tapEditButton(_ sender: UIBarButtonItem) {
+        guard !self.tasks.isEmpty else {return}//테이블뷰가 비어있으면 편집할 필요가 없음
+        self.navigationItem.leftBarButtonItem = self.doneButton //Edit버튼 클릭 시 Done버튼으로 변경되도록 한다.
+        self.tableView.setEditing(true, animated: true) //tableView를 편집모드로 전환
     }
     
     @IBAction func tapAddButton(_ sender: UIBarButtonItem) {
@@ -143,6 +162,34 @@ extension ViewController: UITableViewDataSource {
         }
         
         return cell
+    }
+    
+    //편집모드에서 삭제버튼을 눌렀을때 삭제 버튼이 눌러진 셀이 어떤 셀이 눌러졌는지 알려준다.
+    //편집모드에 들어가지 않더라도 스와이프로 삭제할 수 있게 해준다.
+    //스와이프 모드, 편집모드에서 버튼을 선택하면 호출되는 메서드
+    func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle, forRowAt indexPath: IndexPath) {
+        self.tasks.remove(at: indexPath.row) //tasks배열에 삭제 버튼이 눌러진 행이 테이블뷰에서 사라지게 한다
+        tableView.deleteRows(at: [indexPath], with: .automatic) //tableView에도 할 일이 삭제되게 처리한다.
+        
+        //만약 모든 할 일이 삭제된다면 Done버튼이 자동으로 호출되어 편집모드를 빠져나가게 한다.
+        if self.tasks.isEmpty {
+            self.doneButtonTap()
+        }
+    }
+    
+    //편집모드에서 셀 재정렬하기 위한 메서드 canMoveRowAt메서드와 moveRowAt메서드
+    func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
+        return true
+    }
+    
+    //행이 다른 위치로 이동되면 어디에서 어디로 이동했는지 알려주는 메서드
+    func tableView(_ tableView: UITableView, moveRowAt sourceIndexPath: IndexPath, to destinationIndexPath: IndexPath) {
+        //tableView가 재정렬된 순서대로 배열도 재정렬
+        var tasks = self.tasks
+        let task = tasks[sourceIndexPath.row] //배열의 요소에 접근하기
+        tasks.remove(at: sourceIndexPath.row) //원래 위치에 있던 할 일을 삭제하기
+        tasks.insert(task, at: destinationIndexPath.row) //이동한 위치에 할 일 집어넣기
+        self.tasks = tasks //재정렬된 배열을 기존 배열에 대입하기
     }
 }
 
